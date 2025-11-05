@@ -1,11 +1,19 @@
-# requirements.txt
 fastapi==0.104.1
 uvicorn==0.24.0
 sqlalchemy==2.0.23
-alembic==1.12.1
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+python-jose==3.3.0
+passlib==1.7.4
 python-multipart==0.0.6
-python-dotenv==1.0.0
+bcrypt==4.1.2
 pydantic==2.5.0
-bcrypt==3.2.2
+matplotlib
+DeepFace
+tf-keras
+transformers
+torch
+huggingface_hub
+numpy   
+pandas
+accelerate
+alembic==1.12.1
+python-dotenv==1.0.0

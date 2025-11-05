@@ -3,8 +3,6 @@ from typing import List, Optional, Dict, Any
 import os
 import uuid
 from datetime import datetime
-from pathlib import Path
-import shutil
 
 from app.models.assessment_models import (
     AssessmentType, Question, AssessmentSession, 
@@ -41,8 +39,7 @@ class AssessmentService:
         session = AssessmentSession(
             user_id=user_id,
             assessment_type_id=assessment_type_id,
-            status="in_progress",
-            started_at=datetime.now()
+            status="in_progress"
         )
         db.add(session)
         db.commit()
@@ -98,60 +95,6 @@ class AssessmentService:
         return session
     
     @staticmethod
-    def get_video_download_path(session_id: int, user_specified_path: str = None) -> str:
-        """
-        Get video download path. If user specifies a path, use it.
-        Otherwise, use default downloads folder.
-        """
-        if user_specified_path:
-            # Ensure the directory exists
-            Path(user_specified_path).mkdir(parents=True, exist_ok=True)
-            return user_specified_path
-        else:
-            # Default to system downloads folder
-            downloads_path = str(Path.home() / "Downloads")
-            return downloads_path
-    
-    @staticmethod
-    def save_video_to_user_location(
-        db: Session,
-        recording_id: int,
-        user_specified_folder: str = None
-    ) -> str:
-        """
-        Save video recording to user-specified folder location
-        """
-        recording = db.query(VideoRecording).filter(VideoRecording.id == recording_id).first()
-        if not recording:
-            raise ValueError("Video recording not found")
-        
-        # Get the source video path
-        source_path = recording.video_file_path
-        if not os.path.exists(source_path):
-            raise FileNotFoundError("Source video file not found")
-        
-        # Determine download path
-        download_folder = AssessmentService.get_video_download_path(
-            recording.session_id, 
-            user_specified_folder
-        )
-        
-        # Create filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"assessment_video_session_{recording.session_id}_{timestamp}.webm"
-        destination_path = os.path.join(download_folder, filename)
-        
-        # Copy file to destination
-        shutil.copy2(source_path, destination_path)
-        
-        # Update recording with download path
-        recording.download_path = destination_path
-        recording.last_downloaded_at = datetime.now()
-        db.commit()
-        
-        return destination_path
-    
-    @staticmethod
     def save_video_recording(
         db: Session,
         session_id: int,
@@ -176,12 +119,6 @@ class AssessmentService:
         return recording
     
     @staticmethod
-    def get_video_recording_by_session(db: Session, session_id: int) -> Optional[VideoRecording]:
-        return db.query(VideoRecording).filter(
-            VideoRecording.session_id == session_id
-        ).first()
-    
-    @staticmethod
     def get_video_analysis_by_recording_id(db: Session, recording_id: int) -> Optional[VideoAnalysisResult]:
         return db.query(VideoAnalysisResult).filter(
             VideoAnalysisResult.video_recording_id == recording_id
@@ -192,60 +129,6 @@ class AssessmentService:
         return db.query(AssessmentSession).filter(
             AssessmentSession.user_id == user_id
         ).order_by(AssessmentSession.started_at.desc()).all()
-    
-    @staticmethod
-    def get_session_by_id(db: Session, session_id: int, user_id: int = None) -> Optional[AssessmentSession]:
-        query = db.query(AssessmentSession).filter(AssessmentSession.id == session_id)
-        if user_id:
-            query = query.filter(AssessmentSession.user_id == user_id)
-        return query.first()
-    
-    @staticmethod
-    def delete_assessment_session(db: Session, session_id: int, user_id: int) -> bool:
-        """
-        Delete an assessment session and all associated data
-        """
-        session = db.query(AssessmentSession).filter(
-            AssessmentSession.id == session_id,
-            AssessmentSession.user_id == user_id
-        ).first()
-        
-        if not session:
-            return False
-        
-        # Delete associated responses
-        db.query(AssessmentResponse).filter(
-            AssessmentResponse.session_id == session_id
-        ).delete()
-        
-        # Delete video recordings and analysis
-        recordings = db.query(VideoRecording).filter(
-            VideoRecording.session_id == session_id
-        ).all()
-        
-        for recording in recordings:
-            # Delete analysis results
-            db.query(VideoAnalysisResult).filter(
-                VideoAnalysisResult.video_recording_id == recording.id
-            ).delete()
-            
-            # Delete physical video file if it exists
-            if recording.video_file_path and os.path.exists(recording.video_file_path):
-                try:
-                    os.remove(recording.video_file_path)
-                except OSError:
-                    pass  # Skip if file deletion fails
-        
-        # Delete video recordings
-        db.query(VideoRecording).filter(
-            VideoRecording.session_id == session_id
-        ).delete()
-        
-        # Delete session
-        db.delete(session)
-        db.commit()
-        
-        return True
 
 class VideoAnalysisService:
     
@@ -328,8 +211,7 @@ class VideoAnalysisService:
                 cognitive_analysis=analysis_data["cognitive_analysis"],
                 problem_solving_style=analysis_data["problem_solving_style"],
                 overall_score=analysis_data["overall_score"],
-                analysis_remarks=analysis_data["analysis_remarks"],
-                processed_at=datetime.now()
+                analysis_remarks=analysis_data["analysis_remarks"]
             )
             
             db.add(analysis)
@@ -346,137 +228,5 @@ class VideoAnalysisService:
             # Update recording status to failed
             if recording:
                 recording.processing_status = "failed"
-                recording.error_message = str(e)
                 db.commit()
             raise e
-    
-    @staticmethod
-    def get_video_analysis_results(db: Session, session_id: int) -> Optional[VideoAnalysisResult]:
-        """
-        Get video analysis results for a specific session
-        """
-        recording = db.query(VideoRecording).filter(
-            VideoRecording.session_id == session_id
-        ).first()
-        
-        if not recording:
-            return None
-        
-        return db.query(VideoAnalysisResult).filter(
-            VideoAnalysisResult.video_recording_id == recording.id
-        ).first()
-
-class VideoDownloadService:
-    
-    @staticmethod
-    def prepare_video_for_download(db: Session, session_id: int, user_id: int) -> Dict[str, Any]:
-        """
-        Prepare video for download - verify ownership and file existence
-        """
-        session = db.query(AssessmentSession).filter(
-            AssessmentSession.id == session_id,
-            AssessmentSession.user_id == user_id
-        ).first()
-        
-        if not session:
-            return {"success": False, "error": "Session not found or access denied"}
-        
-        recording = db.query(VideoRecording).filter(
-            VideoRecording.session_id == session_id
-        ).first()
-        
-        if not recording:
-            return {"success": False, "error": "No video recording found for this session"}
-        
-        if not os.path.exists(recording.video_file_path):
-            return {"success": False, "error": "Video file not found on server"}
-        
-        file_info = {
-            "session_id": session_id,
-            "recording_id": recording.id,
-            "file_path": recording.video_file_path,
-            "file_size": recording.file_size_bytes,
-            "duration": recording.video_duration_seconds,
-            "filename": f"assessment_video_session_{session_id}.webm"
-        }
-        
-        return {"success": True, "file_info": file_info}
-    
-    @staticmethod
-    def get_video_download_history(db: Session, session_id: int) -> List[Dict[str, Any]]:
-        """
-        Get download history for a video recording
-        """
-        recording = db.query(VideoRecording).filter(
-            VideoRecording.session_id == session_id
-        ).first()
-        
-        if not recording or not recording.download_path:
-            return []
-        
-        return [{
-            "download_path": recording.download_path,
-            "downloaded_at": recording.last_downloaded_at,
-            "session_id": session_id
-        }]
-
-class AssessmentResultsService:
-    
-    @staticmethod
-    def get_comprehensive_results(db: Session, session_id: int, user_id: int) -> Dict[str, Any]:
-        """
-        Get comprehensive assessment results including video analysis
-        """
-        session = db.query(AssessmentSession).filter(
-            AssessmentSession.id == session_id,
-            AssessmentSession.user_id == user_id
-        ).first()
-        
-        if not session:
-            return {"error": "Session not found"}
-        
-        # Get assessment responses
-        responses = db.query(AssessmentResponse).filter(
-            AssessmentResponse.session_id == session_id
-        ).all()
-        
-        # Get video recording
-        recording = db.query(VideoRecording).filter(
-            VideoRecording.session_id == session_id
-        ).first()
-        
-        # Get video analysis
-        video_analysis = None
-        if recording:
-            video_analysis = db.query(VideoAnalysisResult).filter(
-                VideoAnalysisResult.video_recording_id == recording.id
-            ).first()
-        
-        return {
-            "session": {
-                "id": session.id,
-                "status": session.status,
-                "total_score": session.total_score,
-                "max_score": session.max_score,
-                "percentage": session.percentage,
-                "time_taken_seconds": session.time_taken_seconds,
-                "started_at": session.started_at,
-                "completed_at": session.completed_at
-            },
-            "responses": [
-                {
-                    "question_id": response.question_id,
-                    "user_answer": response.user_answer,
-                    "response_time_seconds": response.response_time_seconds
-                }
-                for response in responses
-            ],
-            "video_recording": {
-                "exists": recording is not None,
-                "duration": recording.video_duration_seconds if recording else None,
-                "file_size": recording.file_size_bytes if recording else None,
-                "processing_status": recording.processing_status if recording else None,
-                "download_available": recording and os.path.exists(recording.video_file_path)
-            },
-            "video_analysis": video_analysis.to_dict() if video_analysis else None
-        }

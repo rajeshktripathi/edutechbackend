@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from ..models import Base, Client
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./edutech_assessments.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./careerpath.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}

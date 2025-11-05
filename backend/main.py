@@ -3,22 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles  # Add this import
 import os
 
-from app.models.enhanced_assessment_models import Base
-from app.database import engine
-
 from app.database import init_db
-from app.routes import auth, users, assessments, enhanced_assessments
+from app.routes import auth, users, assessments, video_analysis, text_analysis
 
-# Create tables
-Base.metadata.create_all(bind=engine)
-
-app = FastAPI(title="EduTech AI Assessment API", version="1.0.0")
-
+app = FastAPI(title="CareerPath AI API", version="1.0.0")
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],  # React app origin
+    #allow_origins=["https://edutech-portal-sigma.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,7 +42,9 @@ app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(assessments.router)
-app.include_router(enhanced_assessments.router)  # new enhanced assessments
+app.include_router(text_analysis.router)
+app.include_router(video_analysis.router)
+
 
 @app.on_event("startup")
 def on_startup():
